@@ -17,8 +17,6 @@
 
 #include "Arduino_DataBus.h"
 
-//#if defined(ESP32) && (CONFIG_IDF_TARGET_ESP32S3)
-
 #if defined(ESP32) && (CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4)  //Modify
 
 #include "esp_lcd_panel_rgb.h"
@@ -55,8 +53,7 @@
 #endif
 
 
-//#if (!defined(ESP_ARDUINO_VERSION_MAJOR)) || (ESP_ARDUINO_VERSION_MAJOR < 3)
-#if (!defined(ESP_ARDUINO_VERSION_MAJOR)) || (ESP_ARDUINO_VERSION_MAJOR >5)
+#if (!defined(ESP_ARDUINO_VERSION_MAJOR)) || (ESP_ARDUINO_VERSION_MAJOR < 3)
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_interface.h"
