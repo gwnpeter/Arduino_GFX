@@ -11,7 +11,7 @@ Arduino_ESP32QSPI::Arduino_ESP32QSPI(
 bool Arduino_ESP32QSPI::begin(int32_t speed, int8_t dataMode)
 {
   // set SPI parameters
-  _speed = (speed == GFX_NOT_DEFINED) ? ESP32QSPI_FREQUENCY : speed;
+  _speed = (speed <= GFX_NOT_DEFINED) ? ESP32QSPI_FREQUENCY : speed;
   _dataMode = (dataMode == GFX_NOT_DEFINED) ? ESP32QSPI_SPI_MODE : dataMode;
 
   pinMode(_cs, OUTPUT);
@@ -32,29 +32,32 @@ bool Arduino_ESP32QSPI::begin(int32_t speed, int8_t dataMode)
     _csPortClr = (PORTreg_t)GPIO_OUT_W1TC_REG;
   }
 
-  spi_bus_config_t buscfg = {
-      .mosi_io_num = _mosi,
-      .miso_io_num = _miso,
-      .sclk_io_num = _sck,
-      .quadwp_io_num = _quadwp,
-      .quadhd_io_num = _quadhd,
-      .data4_io_num = -1,
-      .data5_io_num = -1,
-      .data6_io_num = -1,
-      .data7_io_num = -1,
-      .max_transfer_sz = (ESP32QSPI_MAX_PIXELS_AT_ONCE * 16) + 8,
-      .flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_GPIO_PINS,
-#if (!defined(ESP_ARDUINO_VERSION_MAJOR)) || (ESP_ARDUINO_VERSION_MAJOR < 3)
-      // skip this
-#else
-      .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
-#endif
-      .intr_flags = 0};
-  esp_err_t ret = spi_bus_initialize(ESP32QSPI_SPI_HOST, &buscfg, ESP32QSPI_DMA_CHANNEL);
-  if (ret != ESP_OK)
+  if (speed != GFX_SKIP_DATABUS_UNDERLAYING_BEGIN)
   {
-    ESP_ERROR_CHECK(ret);
-    return false;
+    spi_bus_config_t buscfg = {
+        .mosi_io_num = _mosi,
+        .miso_io_num = _miso,
+        .sclk_io_num = _sck,
+        .quadwp_io_num = _quadwp,
+        .quadhd_io_num = _quadhd,
+        .data4_io_num = -1,
+        .data5_io_num = -1,
+        .data6_io_num = -1,
+        .data7_io_num = -1,
+        .max_transfer_sz = (ESP32QSPI_MAX_PIXELS_AT_ONCE * 16) + 8,
+        .flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_GPIO_PINS,
+#if (!defined(ESP_ARDUINO_VERSION_MAJOR)) || (ESP_ARDUINO_VERSION_MAJOR < 3)
+    // skip this
+#else
+        .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
+#endif
+        .intr_flags = 0};
+    esp_err_t ret = spi_bus_initialize(ESP32QSPI_SPI_HOST, &buscfg, ESP32QSPI_DMA_CHANNEL);
+    if (ret != ESP_OK)
+    {
+      ESP_ERROR_CHECK(ret);
+      return false;
+    }
   }
 
   spi_device_interface_config_t devcfg = {
@@ -62,9 +65,9 @@ bool Arduino_ESP32QSPI::begin(int32_t speed, int8_t dataMode)
       .address_bits = 24,
       .dummy_bits = 0,
       .mode = (uint8_t)_dataMode,
-      #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
       .clock_source = SPI_CLK_SRC_DEFAULT,
-      #endif
+#endif
       .duty_cycle_pos = 0,
       .cs_ena_pretrans = 0,
       .cs_ena_posttrans = 0,
@@ -75,7 +78,7 @@ bool Arduino_ESP32QSPI::begin(int32_t speed, int8_t dataMode)
       .queue_size = 1,
       .pre_cb = nullptr,
       .post_cb = nullptr};
-  ret = spi_bus_add_device(ESP32QSPI_SPI_HOST, &devcfg, &_handle);
+  esp_err_t ret = spi_bus_add_device(ESP32QSPI_SPI_HOST, &devcfg, &_handle);
   if (ret != ESP_OK)
   {
     ESP_ERROR_CHECK(ret);
