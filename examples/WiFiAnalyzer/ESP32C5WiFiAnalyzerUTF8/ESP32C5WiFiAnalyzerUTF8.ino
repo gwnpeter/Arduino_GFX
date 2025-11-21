@@ -1,34 +1,44 @@
 /*******************************************************************************
- * Wio WiFi Analyzer
- * Requires Wio Terminal
- *
- * Libraries:
- * https://github.com/Seeed-Studio/Seeed_Arduino_FS/releases/tag/v2.0.2
- * https://github.com/Seeed-Studio/Seeed_Arduino_SFUD/releases/tag/v2.0.1
- * https://github.com/Seeed-Studio/Seeed_Arduino_mbedtls/archive/d1ca0175e24768120781bf4a43a1fb2c39fce85f.zip
- * https://github.com/Seeed-Studio/Seeed_Arduino_rpcUnified/releases/tag/v2.1.1
- * https://github.com/Seeed-Studio/Seeed_Arduino_rpcWiFi/releases/tag/v1.0.2
- *
- * Firmware:
- * https://github.com/Seeed-Studio/seeed-ambd-firmware/releases/tag/v2.1.1
+ * ESP32-C5 WiFi Analyzer
+ * Requires ESP32-C5 board
  ******************************************************************************/
+#if CONFIG_SOC_WIFI_SUPPORT_5G
 
+// POWER SAVING SETTING
 #define SCAN_INTERVAL 3000
+// #define SCAN_COUNT_SLEEP 3
+// #define LCD_PWR_PIN 1
 
 /*******************************************************************************
  * Start of Arduino_GFX setting
+ *
+ * Arduino_GFX try to find the settings depends on selected board in Arduino IDE
+ * Or you can define the display dev kit not in the board list
+ * Defalult pin list for non display dev kit:
+ * ESP32-C5 various dev board  : CS: 23, DC: 24, RST: 25, BL: 26, SCK: 10, MOSI:  8, MISO: nil
  ******************************************************************************/
+#include <U8g2lib.h>
 #include <Arduino_GFX_Library.h>
 
 #define GFX_BL DF_GFX_BL // default backlight pin, you may replace DF_GFX_BL to actual backlight pin
 
+/* More dev device declaration: https://github.com/moononournation/Arduino_GFX/wiki/Dev-Device-Declaration */
+#if defined(DISPLAY_DEV_KIT)
 Arduino_GFX *gfx = create_default_Arduino_GFX();
+#else /* !defined(DISPLAY_DEV_KIT) */
 
+/* More data bus class: https://github.com/moononournation/Arduino_GFX/wiki/Data-Bus-Class */
+Arduino_DataBus *bus = create_default_Arduino_DataBus();
+
+/* More display class: https://github.com/moononournation/Arduino_GFX/wiki/Display-Class */
+Arduino_GFX *gfx = new Arduino_ILI9341(bus, DF_GFX_RST, 3 /* rotation */, false /* IPS */);
+
+#endif /* !defined(DISPLAY_DEV_KIT) */
 /*******************************************************************************
  * End of Arduino_GFX setting
  ******************************************************************************/
 
-#include <rpcWiFi.h>
+#include <WiFi.h>
 
 int16_t w, h, banner_text_size, banner_height, graph24_baseline, graph50_baseline, graph_baseline, graph_height, channel24_width, channel50_width, signal_width;
 
@@ -67,6 +77,8 @@ uint16_t channel_color[] = {
     RGB565_RED, RGB565_ORANGE, RGB565_YELLOW, RGB565_LIME, RGB565_CYAN, RGB565_DODGERBLUE, RGB565_MAGENTA,
     RGB565_RED, RGB565_WHITE};
 
+uint8_t scan_count = 0;
+
 uint16_t channelIdx(int channel)
 {
   if (channel <= 14) // 2.4 GHz, channel 1-14
@@ -97,12 +109,10 @@ void setup()
   Serial.begin(115200);
   // Serial.setDebugOutput(true);
   // while(!Serial);
-  Serial.println("Arduino_GFX Wio WiFi Analyzer example");
+  Serial.println("Arduino_GFX ESP32-C5 WiFi Analyzer UTF8 example");
 
-  // Set WiFi to station mode and disconnect from an AP if it was previously connected
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  delay(100);
+  // Enable Station Interface
+  WiFi.STA.begin();
 
 #if defined(LCD_PWR_PIN)
   pinMode(LCD_PWR_PIN, OUTPUT);    // sets the pin as output
@@ -120,29 +130,33 @@ void setup()
     Serial.println("gfx->begin() failed!");
   }
   gfx->fillScreen(RGB565_BLACK);
+  gfx->setUTF8Print(true); // enable UTF8 support for the Arduino print() function
+  gfx->setFont(u8g2_font_unifont_h_cjk);
 
   w = gfx->width();
   h = gfx->height();
-  banner_text_size = (w < 384) ? 1 : 2;
-  banner_height = (banner_text_size * 8) + 2;
-  graph_height = ((h - banner_height) / 2) - 20; // minus 2 text lines
+  banner_text_size = (h < 320) ? 1 : 2;
+  banner_height = banner_text_size * 16;
+  graph_height = ((h - banner_height) / 2) - 16; // minus 2 text lines
   graph24_baseline = banner_height + graph_height;
-  graph50_baseline = graph24_baseline + 20 + graph_height;
+  graph50_baseline = graph24_baseline + 14 + graph_height;
   channel24_width = w / 16;
   channel50_width = w / 56;
 
   // init banner
-  gfx->fillRect(0, 0, w, banner_text_size * 8, RGB565_PURPLE);
+  gfx->fillRect(0, 0, w, banner_text_size * 16, RGB565_PURPLE);
   gfx->setTextSize(banner_text_size);
-  gfx->setCursor(0, 0);
-  gfx->setTextColor(RGB565_WHITE, RGB565_LIME);
-  gfx->print(" Wio ");
+  gfx->setCursor(0, banner_text_size * 14);
+  gfx->setTextColor(RGB565_WHITE, RGB565_RED);
+  gfx->print(" ESP32");
+  gfx->setTextColor(RGB565_WHITE, RGB565_DARKORANGE);
+  gfx->print("-C5 ");
   gfx->setTextColor(RGB565_WHITE, RGB565_LIMEGREEN);
-  gfx->print(" Dual Band ");
+  gfx->print(" 雙頻 ");
   gfx->setTextColor(RGB565_WHITE, RGB565_MEDIUMBLUE);
   gfx->print(" WiFi ");
   gfx->setTextColor(RGB565_WHITE, RGB565_PURPLE);
-  gfx->print(" Analyzer");
+  gfx->print(" 分析儀");
   gfx->setTextSize(1);
 
 #ifdef CANVAS
@@ -183,6 +197,10 @@ void loop()
     peak_id_list[i] = -1;
   }
 
+  WiFi.setBandMode(WIFI_BAND_MODE_AUTO);
+  // WiFi.setBandMode(WIFI_BAND_MODE_2G_ONLY);
+  // WiFi.setBandMode(WIFI_BAND_MODE_5G_ONLY);
+
   // WiFi.scanNetworks will return the number of networks found
   int n = WiFi.scanNetworks(false /* async */, true /* show_hidden */);
 
@@ -192,8 +210,8 @@ void loop()
   if (n == 0)
   {
     gfx->setTextColor(RGB565_WHITE);
-    gfx->setCursor(0, banner_height);
-    gfx->println("No networks found");
+    gfx->setCursor(0, banner_height + 14);
+    gfx->println("找不到WiFi");
   }
   else
   {
@@ -274,7 +292,7 @@ void loop()
         {
           ssid = WiFi.BSSIDstr(i);
         }
-        text_width = (ssid.length() + 6) * 6;
+        text_width = (ssid.length() + 6) * 8;
         if (text_width > w)
         {
           offset = 0;
@@ -288,7 +306,7 @@ void loop()
           }
         }
         gfx->setTextColor(color);
-        gfx->setCursor(offset, ((height + 8) > graph_height) ? (graph_baseline - graph_height) : (graph_baseline - 10 - height));
+        gfx->setCursor(offset, ((height + 16) > graph_height) ? (graph_baseline - graph_height + 14) : (graph_baseline - height - 2));
         gfx->print(ssid);
         gfx->print('(');
         gfx->print(rssi);
@@ -301,6 +319,8 @@ void loop()
     }
   }
 
+  gfx->setFont(u8g2_font_04b_03_tr);
+
   // draw 2.4 GHz graph base axle
   gfx->drawFastHLine(0, graph24_baseline, w, RGB565_WHITE);
   for (idx = 0; idx < 14; idx++)
@@ -310,13 +330,13 @@ void loop()
     if (channel > 0)
     {
       gfx->setTextColor(channel_color[idx]);
-      gfx->setCursor(offset - ((channel < 10) ? 3 : 6), graph24_baseline + 2);
+      gfx->setCursor(offset - ((channel < 10) ? 3 : 5), graph24_baseline + 8);
       gfx->print(channel);
     }
     if (ap_count_list[idx] > 0)
     {
       gfx->setTextColor(RGB565_LIGHTGREY);
-      gfx->setCursor(offset - ((ap_count_list[idx] < 10) ? 3 : 6), graph24_baseline + 8 + 2);
+      gfx->setCursor(offset - ((ap_count_list[idx] < 10) ? 3 : 5), graph24_baseline + 8 + 7);
       gfx->print(ap_count_list[idx]);
     }
   }
@@ -330,25 +350,24 @@ void loop()
     if (channel > 0)
     {
       gfx->setTextColor(channel_color[idx]);
-      gfx->setCursor(offset - ((channel < 100) ? 6 : 9), graph50_baseline + 2);
+      gfx->setCursor(offset - ((channel < 100) ? 5 : 8), graph50_baseline + 8);
       gfx->print(channel);
     }
     if (ap_count_list[idx] > 0)
     {
       gfx->setTextColor(RGB565_LIGHTGREY);
-      gfx->setCursor(offset - ((ap_count_list[idx] < 10) ? 3 : 6), graph50_baseline + 8 + 2);
+      gfx->setCursor(offset - ((ap_count_list[idx] < 10) ? 3 : 5), graph50_baseline + 8 + 7);
       gfx->print(ap_count_list[idx]);
     }
   }
 
-  gfx->setTextSize(2);
+  gfx->setFont(u8g2_font_unifont_h_cjk);
   gfx->setTextColor(RGB565_WHITE, RGB565_MEDIUMBLUE);
-  gfx->setCursor(0, graph24_baseline + 1);
-  gfx->print("2.4");
+  gfx->setCursor(0, graph24_baseline + 14);
+  gfx->print("2.4G");
   gfx->setTextColor(RGB565_WHITE, RGB565_LIMEGREEN);
-  gfx->setCursor(0, graph50_baseline + 1);
-  gfx->print("5");
-  gfx->setTextSize(1);
+  gfx->setCursor(0, graph50_baseline + 14);
+  gfx->print("5G");
 
 #ifdef CANVAS
   gfx->flush();
@@ -368,6 +387,11 @@ void loop()
 #if defined(GFX_BL)
     pinMode(GFX_BL, INPUT); // disable pin
 #endif
+
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
+    esp_deep_sleep_start();
   }
 #endif // defined(SCAN_COUNT_SLEEP)
 }
+
+#endif // #if CONFIG_SOC_WIFI_SUPPORT_5G

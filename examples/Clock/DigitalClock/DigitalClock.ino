@@ -1,4 +1,8 @@
 /*******************************************************************************
+   Arduino Digital Clock simple example
+ ******************************************************************************/
+
+/*******************************************************************************
  * Start of Arduino_GFX setting
  *
  * Arduino_GFX try to find the settings depends on selected board in Arduino IDE
@@ -42,10 +46,14 @@ Arduino_GFX *gfx = new Arduino_ILI9341(bus, DF_GFX_RST, 0 /* rotation */, false 
  * End of Arduino_GFX setting
  ******************************************************************************/
 
-/* more fonts at: https://github.com/moononournation/ArduinoFreeFontFile.git */
-#include "FreeMono8pt7b.h"
-#include "FreeSansBold10pt7b.h"
-#include "FreeSerifBoldItalic12pt7b.h"
+static uint8_t conv2d(const char *p)
+{
+  uint8_t v = 0;
+  return (10 * (*p - '0')) + (*++p - '0');
+}
+
+static int16_t hh, mm, ss;
+static unsigned long targetTime; // next action time
 
 void setup(void)
 {
@@ -56,7 +64,7 @@ void setup(void)
   Serial.begin(115200);
   // Serial.setDebugOutput(true);
   // while(!Serial);
-  Serial.println("Arduino_GFX Hello World Gfxfont example");
+  Serial.println("Arduino_GFX Clock example");
 
   // Init Display
   if (!gfx->begin())
@@ -70,33 +78,58 @@ void setup(void)
   digitalWrite(GFX_BL, HIGH);
 #endif
 
-  gfx->setCursor(10, 10);
-  gfx->setFont(&FreeMono8pt7b);
-  gfx->setTextColor(RGB565_RED);
-  gfx->println("Hello World!");
+  // init LCD constant
+  hh = conv2d(__TIME__);
+  mm = conv2d(__TIME__ + 3);
+  ss = conv2d(__TIME__ + 6);
 
-  delay(5000); // 5 seconds
+  targetTime = ((millis() / 1000) + 1) * 1000;
+
+  int textSize = gfx->width() / 8 / 6;
+
+  gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
+  gfx->setTextSize(textSize, textSize, 2 /* pixel_margin */);
 }
 
 void loop()
 {
-  gfx->setCursor(random(gfx->width()), random(gfx->height()));
-  gfx->setTextColor(random(0xffff));
-  uint8_t textSize = random(3);
-  switch (textSize)
+  unsigned long cur_millis = millis();
+  if (cur_millis >= targetTime)
   {
-  case 1:
-    gfx->setFont(&FreeMono8pt7b);
-    break;
-  case 2:
-    gfx->setFont(&FreeSansBold10pt7b);
-    break;
-  default:
-    gfx->setFont(&FreeSerifBoldItalic12pt7b);
-    break;
+    targetTime += 1000;
+    ss++; // Advance second
+    if (ss == 60)
+    {
+      ss = 0;
+      mm++; // Advance minute
+      if (mm > 59)
+      {
+        mm = 0;
+        hh++; // Advance hour
+        if (hh > 23)
+        {
+          hh = 0;
+        }
+      }
+    }
+
+    // draw time
+    gfx->setCursor(0, 0);
+    if (hh < 10) {
+      gfx->print('0');
+    }
+    gfx->print(hh);
+    gfx->print(':');
+    if (mm < 10) {
+      gfx->print('0');
+    }
+    gfx->print(mm);
+    gfx->print(':');
+    if (ss < 10) {
+      gfx->print('0');
+    }
+    gfx->print(ss);
   }
 
-  gfx->println("Hello World!");
-
-  delay(1000); // 1 second
+  delay(1);
 }

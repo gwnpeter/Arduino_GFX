@@ -1,4 +1,12 @@
 /*******************************************************************************
+   Arduino Digital Clock example (sync time with NTP server)
+ ******************************************************************************/
+
+const char *SSID_NAME = "YourAP";
+const char *SSID_PASSWORD = "PleaseInputYourPasswordHere";
+const long gmtOffset_sec = 8 * 60 * 60; // timezone
+
+/*******************************************************************************
  * Start of Arduino_GFX setting
  *
  * Arduino_GFX try to find the settings depends on selected board in Arduino IDE
@@ -42,10 +50,31 @@ Arduino_GFX *gfx = new Arduino_ILI9341(bus, DF_GFX_RST, 0 /* rotation */, false 
  * End of Arduino_GFX setting
  ******************************************************************************/
 
-/* more fonts at: https://github.com/moononournation/ArduinoFreeFontFile.git */
-#include "FreeMono8pt7b.h"
-#include "FreeSansBold10pt7b.h"
-#include "FreeSerifBoldItalic12pt7b.h"
+#include <WiFi.h>
+
+void setClock()
+{
+  configTime(0, 0, "time1.google.com", "pool.ntp.org");
+
+  Serial.print("Waiting for NTP time sync: ");
+  time_t nowSecs = time(nullptr);
+  while (nowSecs < 8 * 3600 * 2)
+  {
+    delay(500);
+    Serial.print(".");
+    yield();
+    nowSecs = time(nullptr);
+  }
+
+  Serial.println();
+  struct tm timeinfo;
+  gmtime_r(&nowSecs, &timeinfo);
+  Serial.print("Current time: ");
+  char buf[26];
+  Serial.println(asctime_r(&timeinfo, buf));
+}
+
+static unsigned long targetTime; // next action time
 
 void setup(void)
 {
@@ -56,7 +85,7 @@ void setup(void)
   Serial.begin(115200);
   // Serial.setDebugOutput(true);
   // while(!Serial);
-  Serial.println("Arduino_GFX Hello World Gfxfont example");
+  Serial.println("Arduino_GFX Clock example");
 
   // Init Display
   if (!gfx->begin())
@@ -70,33 +99,39 @@ void setup(void)
   digitalWrite(GFX_BL, HIGH);
 #endif
 
-  gfx->setCursor(10, 10);
-  gfx->setFont(&FreeMono8pt7b);
-  gfx->setTextColor(RGB565_RED);
-  gfx->println("Hello World!");
+  WiFi.begin(SSID_NAME, SSID_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print('.');
+    delay(500);
+  }
 
-  delay(5000); // 5 seconds
+  setClock();
+
+  targetTime = ((millis() / 1000) + 1) * 1000;
+
+  int textSize = gfx->width() / 8 / 6;
+
+  gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
+  gfx->setTextSize(textSize, textSize, 2 /* pixel_margin */);
 }
 
 void loop()
 {
-  gfx->setCursor(random(gfx->width()), random(gfx->height()));
-  gfx->setTextColor(random(0xffff));
-  uint8_t textSize = random(3);
-  switch (textSize)
+  unsigned long cur_millis = millis();
+  if (cur_millis >= targetTime)
   {
-  case 1:
-    gfx->setFont(&FreeMono8pt7b);
-    break;
-  case 2:
-    gfx->setFont(&FreeSansBold10pt7b);
-    break;
-  default:
-    gfx->setFont(&FreeSerifBoldItalic12pt7b);
-    break;
+    targetTime += 1000;
+
+    char timeStr[9];
+    time_t now;
+    time(&now);
+    now += gmtOffset_sec;
+    struct tm *tmLocal = localtime(&now);
+    strftime(timeStr, sizeof(timeStr), "%H:%M:%S", tmLocal);
+    gfx->setCursor(0, 0);
+    gfx->print(timeStr);
   }
 
-  gfx->println("Hello World!");
-
-  delay(1000); // 1 second
+  delay(1);
 }
