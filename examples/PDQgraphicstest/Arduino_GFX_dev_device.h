@@ -12,6 +12,8 @@
 // #define ESP32_4848S040_86BOX_GUITION
 // #define ESP32_8048S043
 // #define ESP32_8048S070
+// #define ESP32_C3_OLED_12864
+// #define ESP32_C3_OLED_7240
 // #define ESP32_LCDKIT_SPI
 // #define ESP32_LCDKIT_PAR8A
 // #define ESP32_LCDKIT_PAR8B
@@ -268,6 +270,30 @@ Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
 Arduino_RGB_Display *gfx = new Arduino_RGB_Display(
     800 /* width */, 480 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */);
 
+#elif defined(ESP32_C3_OLED_12864)
+#define GFX_DEV_DEVICE ESP32_C3_OLED_12864
+#include <Wire.h>
+#define DEV_DEVICE_INIT()         \
+  {                               \
+    Wire.begin(5 /* SDA */, 6 /* SCL */); \
+  }
+Arduino_DataBus *bus = new Arduino_Wire(0x3C /* i2c_addr */, 0x00 /* commandPrefix */, 0x40 /* dataPrefix */, &Wire /* wire */);
+Arduino_G *g = new Arduino_SSD1306(bus, GFX_NOT_DEFINED /* RST */, 128 /* width */, 64 /* height */);
+#define CANVAS
+Arduino_GFX *gfx = new Arduino_Canvas_Mono(128 /* width */, 64 /* height */, g, 0 /* output_x */, 0 /* output_y */, true /* verticalByte */);
+
+#elif defined(ESP32_C3_OLED_7240)
+#define GFX_DEV_DEVICE ESP32_C3_OLED_7240
+#include <Wire.h>
+#define DEV_DEVICE_INIT()         \
+  {                               \
+    Wire.begin(5 /* SDA */, 6 /* SCL */); \
+  }
+Arduino_DataBus *bus = new Arduino_Wire(0x3C /* i2c_addr */, 0x00 /* commandPrefix */, 0x40 /* dataPrefix */, &Wire /* wire */);
+Arduino_G *g = new Arduino_SSD1306(bus, GFX_NOT_DEFINED /* RST */, 72 /* width */, 40 /* height */);
+#define CANVAS
+Arduino_GFX *gfx = new Arduino_Canvas_Mono(72 /* width */, 40 /* height */, g, 0 /* output_x */, 0 /* output_y */, true /* verticalByte */);
+
 #elif defined(ESP32_LCDKIT_SPI)
 #define GFX_DEV_DEVICE ESP32_LCDKIT_SPI
 #define GFX_BL 23
@@ -506,7 +532,7 @@ Arduino_DataBus *bus = new Arduino_ESP32QSPI(
 Arduino_GFX *g = new Arduino_AXS15231B(
     bus, GFX_NOT_DEFINED /* RST */, 0 /* rotation */, false /* IPS */, 320 /* width */, 480 /* height */,
     0 /* col offset 1 */, 0 /* row offset 1 */, 0 /* col offset 2 */, 0 /* row offset 2 */,
-    axs15231b_320480_init_operations, sizeof(axs15231b_320480_init_operations));
+    axs15231b_320480_type1_init_operations, sizeof(axs15231b_320480_type1_init_operations));
 #define CANVAS
 Arduino_Canvas *gfx = new Arduino_Canvas(
     320 /* width */, 480 /* height */, g, 0 /* output_x */, 0 /* output_y */, 0 /* rotation */);
